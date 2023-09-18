@@ -5,9 +5,9 @@ import math
 
 # Linear Embedding
 class LinearEmbedding(nn.Module):
-    def __init__(self, d_model, linear: bool = False):
+    def __init__(self, output_vars, d_model, linear: bool = False):
         super(LinearEmbedding, self).__init__()
-        self.embedding_layer = nn.Linear(4, d_model)
+        self.embedding_layer = nn.Linear(output_vars, d_model)
         self.relu = nn.ReLU()
         self.linear = linear
 
@@ -55,10 +55,10 @@ class TransformerAutoencoder(nn.Module):
                                     custom_decoder=None, layer_norm_eps=1e-05,
                                     batch_first=True, norm_first=False,
                                     device=device, dtype=None)
-        self.embedding = LinearEmbedding(d_model)
+        self.embedding = LinearEmbedding(output_vars + (output_vars % 3), d_model)
         self.pos_enc = PositionalEncoding(d_model, max_seq_len, base=100)
         self.dense = nn.Linear(d_model, 128)
-        self.output = nn.Linear(128, output_vars)
+        self.output = nn.Linear(128, output_vars + (output_vars % 3))
 
     def forward(self, src):
         src_mask = (src[:,:,0] == 0)

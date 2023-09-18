@@ -2,87 +2,217 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import Dataset
 import json
-from torch import optim
+from torch import optim, nn
 import torch
+from sklearn.metrics import f1_score
+import scipy
 
-# Make 2-dimensional histogram
-def make_hist2d(group_num, group_size, step, names, inputs, outputs, scaler, event_type, file_path, lower=None, upper=None):
-    inputs = scaler.inverse_transform(inputs)
-    outputs = scaler.inverse_transform(outputs)
-    if lower is None:
-        lower = np.min((outputs[:,group_num*group_size+step], inputs[:,group_num*group_size+step]))
-    if upper is None:
-        upper = np.max((outputs[:,group_num*group_size+step], inputs[:,group_num*group_size+step]))
-    varname = names[group_num*group_size+step]
-    heatmap, xedges, yedges = np.histogram2d(inputs[:,group_num*group_size+step],
-                                             outputs[:,group_num*group_size+step],
-                                             bins=30,
-                                             range=[[lower, upper], [lower, upper]])
-    extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+def optimize_thresholds(y_true, y_pred):
+    y_t = y_true.copy() + 1
+    y_p = y_pred.copy() + 1
 
-    #Plot heatmap
-    plt.imshow(heatmap.T,
-               extent=extent,
-               origin='lower')
-    plt.plot([lower, upper],
-             [lower, upper],
-             color='blue')
-    fig = plt.gcf()
-    plt.set_cmap('gist_heat_r')
-    plt.xlabel('%s True' % varname)
-    plt.ylabel('%s Pred' % varname)
-    plt.title('Frequency Heatmap (' + event_type + ')')
-    plt.xlim(lower, upper)
-    plt.ylim(lower, upper)
-    plt.colorbar()
-    plt.savefig(file_path + '/hist2d_' + event_type)
-    plt.show()
+    sorted_indices = np.argsort(y_p)
+    sorted_y_t = y_t[sorted_indices]
+    sorted_y_p = y_p[sorted_indices]
 
-# Custom loss function expects shape [batch_size, num_particles, 4] where 3 items are pt, eta, phi, b-tag
+    def objective(thresholds):
+        lower_threshold, upper_threshold = thresholds
+        classified_preds = np.zeros_like(sorted_y_t)
+        classified_preds[sorted_y_p > upper_threshold] = 2
+        classified_preds[(sorted_y_p <= upper_threshold) & (sorted_y_p > lower_threshold)] = 1
+        f1 = f1_score(sorted_y_t, classified_preds, average='micro')
+        return -f1
+
+    initial_thresholds = [0.5, 1.5]
+    bounds = [(0, 1), (1, 2)]
+
+    result = scipy.optimize.minimize(objective, initial_thresholds, bounds=bounds, method='L-BFGS-B')
+
+    optimized_thresholds = result.x
+
+    y_p[y_p < (optimized_thresholds[0])] == 0
+    y_p[np.logical_and(y_p >= (optimized_thresholds[0]), y_p <= (optimized_thresholds[1] - 1))] == 1
+    y_p[y_p > (optimized_thresholds[1])] == 2
+
+    return y_p - 1
+
+def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lower=None, upper=None):
+    names = ["lepton pT", "lepton eta", "lepton phi", "Padding",
+             "missing energy magnitude", "Padding", "missing energy phi", "Padding",
+             "jet 1 pt", "jet 1 eta", "jet 1 phi", "jet 1 b-tag",
+             "jet 2 pt", "jet 2 eta", "jet 2 phi", "jet 2 b-tag",
+             "jet 3 pt", "jet 3 eta", "jet 3 phi", "jet 3 b-tag",
+             "jet 4 pt", "jet 4 eta", "jet 4 phi", "jet 4 b-tag"]
+
+
+    inputs = scaler.inverse_transform(ins)
+    outputs = scaler.inverse_transform(outs)
+
+    if steps == 4:
+        inputs[:,3::4] = ins[:,3::4]
+        outputs[:,3::4] = outs[:,3::4]
+
+    for step in range(steps):
+        if step == 3:
+            bins = 30
+            varname = names[group_num*steps+step]
+            heatmap, xedges, yedges = np.histogram2d(inputs[:,group_num*steps+step],
+                                                    outputs[:,group_num*steps+step],
+                                                    bins=bins,
+                                                    range=[[lower[step], upper[step]], [lower[step], upper[step]]])
+            extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+
+            #Plot heatmap
+            plt.imshow(heatmap.T,
+                    extent=extent,
+                    origin='lower')
+            plt.plot([lower[step], upper[step]],
+                    [lower[step], upper[step]],
+                    color='blue')
+            fig = plt.gcf()
+            plt.set_cmap('gist_heat_r')
+            plt.xlabel('%s scaled True' % varname)
+            plt.ylabel('%s scaled Pred' % varname)
+            plt.title('Frequency Heatmap (' + event_type + ')')
+            plt.xlim(lower[step], upper[step])
+            plt.ylim(lower[step], upper[step])
+            plt.colorbar()
+            plt.savefig(file_path + '/hist2d_' + event_type + '_' + names[group_num*steps+step] + '_high_res.png')
+            plt.show()
+            plt.close()
+        if step == 3:
+            bins = 3
+            outputs[:, group_num*step+step] = optimize_thresholds(inputs[:,group_num*steps+step], outputs[:,group_num*steps+step])
+        else:
+            bins = 30
+        varname = names[group_num*steps+step]
+        heatmap, xedges, yedges = np.histogram2d(inputs[:,group_num*steps+step],
+                                                 outputs[:,group_num*steps+step],
+                                                 bins=bins,
+                                                 range=[[lower[step], upper[step]], [lower[step], upper[step]]])
+        extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+
+        #Plot heatmap
+        plt.imshow(heatmap.T,
+                  extent=extent,
+                  origin='lower')
+        plt.plot([lower[step], upper[step]],
+                 [lower[step], upper[step]],
+                 color='blue')
+        fig = plt.gcf()
+        plt.set_cmap('gist_heat_r')
+        plt.xlabel('%s scaled True' % varname)
+        plt.ylabel('%s scaled Pred' % varname)
+        plt.title('Frequency Heatmap (' + event_type + ')')
+        plt.xlim(lower[step], upper[step])
+        plt.ylim(lower[step], upper[step])
+        plt.colorbar()
+        plt.savefig(file_path + '/hist2d_' + event_type + '_' + names[group_num*steps+step] + '_high_res.png')
+        plt.show()
+        plt.close()
+
+class SoftLabelFocalLoss(nn.Module):
+    def __init__(self, gamma=2., reduction='mean', entropy_weight=.2):
+        super(SoftLabelFocalLoss, self).__init__()
+        self.gamma = gamma
+        self.reduction = reduction
+        self.entropy_weight = entropy_weight
+
+    def forward(self, inputs, targets, alpha):
+        batch_size = len(inputs)
+
+        mask = targets[:, 0] != 999
+
+        inputs = inputs[mask]
+        targets = targets[mask]
+
+        if targets.shape[0] == 0:
+            return torch.tensor(0.0).to(targets.device)
+
+        alpha = torch.from_numpy(alpha).to(inputs.device).float()
+        probs = nn.functional.softmax(inputs, dim=1)
+        fl = -alpha * (targets * (1. - probs).pow(self.gamma) * torch.log(probs + 1e-6) +\
+         (1. - targets) * probs.pow(self.gamma) * torch.log(1. - probs + 1e-6))
+        fl = fl * targets
+        fl = fl.sum(dim=1)
+
+        entropy = -(probs.exp() * probs).sum(dim=1)
+        fl += self.entropy_weight * entropy
+
+        if self.reduction == 'mean':
+            return fl.mean() * len(inputs) / batch_size
+        elif self.reduction == 'sum':
+            return fl.sum() * len(inputs) / batch_size
+        else:
+            return fl
+
+# Custom loss functions
 class custom_loss:
-    def __init__(self, phi_limit, lower_pt_limit, alpha=0.4, beta=.5, gamma=1., delta=.5, output_vars=3):
+    def __init__(self, phi_limit, alpha=0.4, beta=.5, gamma=1., delta=.5, lower_pt_limit=[], f_alphas=[], output_vars=3):
         self.phi_limit = phi_limit
-        self.lower_pt_limit = lower_pt_limit
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.delta = delta
+        self.f_alphas = f_alphas
         self.vars = output_vars
+        self.lower_pt_limit = lower_pt_limit
+
     def compute_loss(self, output, target, zero_padded=[]):
         loss = 0
-        for i in range(output.size()[1]):
-            if i in zero_padded:
-                continue
-            elif i % self.vars == 0:
-                loss += torch.mean((target[:,i] - output[:,i])**2 + torch.gt(output[:,i], self.lower_pt_limit[i % 4]).long() * \
-                    (self.gamma / (1 + torch.exp(-(output[:,i] - self.lower_pt_limit[i % 4]) * 3)) - self.gamma) + \
-                        torch.le(output[:,i], self.lower_pt_limit[i % 4]).long()*(self.gamma/2 - self.gamma))
-            elif i % self.vars == 1:
-                loss += torch.mean((target[:,i] - output[:,i])**2 - output[:,i]**2 * self.beta)
-            elif i % self.vars == 2:
-                loss += torch.mean(torch.le(torch.abs(output[:,i]), self.phi_limit).long() *\
-                    ((torch.sin(((output[:,i] - target[:,i]) / self.phi_limit - .5) * np.pi) + 1)**2 +\
-                        (torch.sin(((output[:,i] - target[:,i]) / self.phi_limit - .5) * np.pi) + 1) * 2) * self.alpha +\
-                    torch.gt(torch.abs(output[:,i]), self.phi_limit).long() *\
-                    (((torch.sin(((self.phi_limit * torch.sign(output[:,i]) - target[:,i]) / self.phi_limit  - .5) * \
-                                    np.pi) + 1)**2 +\
-                        (torch.sin(((self.phi_limit * torch.sign(output[:,i]) - target[:,i]) / self.phi_limit  - .5) * \
-                                np.pi) + 1) * 2) * self.alpha +\
-                    (self.phi_limit*torch.sign(output[:,i]) - output[:,i])**2))
-            elif i % self.vars == 3:
-                if self.vars == 4:
-                    loss += torch.mean((target[:,i] - output[:,i])**2) * self.delta
-                else:
+        if self.vars == 3:
+            for i in range(output.size()[1] - 2):
+                if i in zero_padded:
                     continue
-        return loss / (output.size()[1] - len(zero_padded))
+                elif i % self.vars == 0:
+                    loss += torch.mean((target[:,i] - output[:,i])**2 + torch.gt(output[:,i], self.lower_pt_limit[i // 4]).long() * \
+                        (self.gamma / (1 + torch.exp(-(output[:,i] - self.lower_pt_limit[i // 4]) * 3)) - self.gamma) + \
+                            torch.le(output[:,i], self.lower_pt_limit[i // 4]).long()*(self.gamma/2 - self.gamma))
+                elif i % self.vars == 1:
+                    loss += torch.mean((target[:,i] - output[:,i])**2 - output[:,i]**2 * self.beta)
+                elif i % self.vars == 2:
+                    loss += torch.mean(torch.le(torch.abs(output[:,i]), self.phi_limit).long() *\
+                        ((torch.sin(((output[:,i] - target[:,i]) / self.phi_limit - .5) * np.pi) + 1)**2 +\
+                            (torch.sin(((output[:,i] - target[:,i]) / self.phi_limit - .5) * np.pi) + 1) * 2) * self.alpha +\
+                        torch.gt(torch.abs(output[:,i]), self.phi_limit).long() *\
+                        (((torch.sin(((self.phi_limit * torch.sign(output[:,i]) - target[:,i]) / self.phi_limit  - .5) * \
+                                        np.pi) + 1)**2 +\
+                            (torch.sin(((self.phi_limit * torch.sign(output[:,i]) - target[:,i]) / self.phi_limit  - .5) * \
+                                    np.pi) + 1) * 2) * self.alpha +\
+                        (self.phi_limit*torch.sign(output[:,i]) - output[:,i])**2))
+            return loss / (output.size()[1] - len(zero_padded))
+        else:
+            self.vars = 5
+            for i in range(output.size()[1]-2):
+                if i in zero_padded:
+                    continue
+                elif i % self.vars == 0:
+                    loss += torch.mean((target[:,i] - output[:,i])**2 + torch.gt(output[:,i], self.lower_pt_limit[i // self.vars]).long() * \
+                        (self.gamma / (1 + torch.exp(-(output[:,i] - self.lower_pt_limit[i // self.vars]) * 3)) - self.gamma) + \
+                            torch.le(output[:,i], self.lower_pt_limit[i // self.vars]).long()*(self.gamma/2 - self.gamma))
+                elif i % self.vars == 1:
+                    loss += torch.mean((target[:,i] - output[:,i])**2 - output[:,i]**2 * self.beta)
+                elif i % self.vars == 2:
+                    loss += torch.mean(torch.le(torch.abs(output[:,i]), self.phi_limit).long() *\
+                        ((torch.sin(((output[:,i] - target[:,i]) / self.phi_limit - .5) * np.pi) + 1)**2 +\
+                            (torch.sin(((output[:,i] - target[:,i]) / self.phi_limit - .5) * np.pi) + 1) * 2) * self.alpha +\
+                        torch.gt(torch.abs(output[:,i]), self.phi_limit).long() *\
+                        (((torch.sin(((self.phi_limit * torch.sign(output[:,i]) - target[:,i]) / self.phi_limit  - .5) * \
+                                        np.pi) + 1)**2 +\
+                            (torch.sin(((self.phi_limit * torch.sign(output[:,i]) - target[:,i]) / self.phi_limit  - .5) * \
+                                    np.pi) + 1) * 2) * self.alpha +\
+                        (self.phi_limit*torch.sign(output[:,i]) - output[:,i])**2))
+                elif i % self.vars == 3:
+                    loss += (SoftLabelFocalLoss()(output[:,i:i+2], target[:,i:i+2], self.f_alphas[(i - 3) // self.vars])) * self.delta
+            return loss / (output.size()[1] - len(zero_padded) - 6)
 
 # Dataset class
 class DataLabelDataset(Dataset):
     def __init__(self, data, labels, dtype: str = 'numpy'):
         super(DataLabelDataset, self).__init__()
         if dtype == 'numpy':
-            self.data = torch.from_numpy(data)
-            self.labels = torch.from_numpy(labels)
+            self.data = torch.from_numpy(data).type(torch.FloatTensor)
+            self.labels = torch.from_numpy(labels).type(torch.FloatTensor)
         elif dtype == 'torch':
             self.data = data
             self.labels = labels
@@ -152,16 +282,19 @@ def parse_model_name(model_name):
         "H": "num_heads",
         "L": "num_layers",
         "F": "d_ff",
-        "Dr": "dropout",
+        "DR": "dropout",
         "BS": "batch_size",
         "T": "test_batch_size",
-        "RE": "resume_epoch",
+        "AE": "ae_resume_epoch",
+        "PC": "pc_resume_epoch",
+        "FC": "fc_resume_epoch",
         "NE": "num_epochs",
         "ES": "epochs_to_saturate",
         "IM": "init_momentum",
         "MM": "max_momentum",
         "TILR": "tae_init_lr",
-        "CILR": "class_init_lr",
+        "PCLR": "pc_init_lr",
+        "FCLR": "fc_init_lr",
         "MSL": "max_seq_len",
         "Mk": "mask",
         "A": "alpha",
