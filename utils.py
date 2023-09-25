@@ -64,8 +64,8 @@ def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lowe
 
             #Plot heatmap
             plt.imshow(heatmap.T,
-                    extent=extent,
-                    origin='lower')
+                      extent=extent,
+                      origin='lower')
             plt.plot([lower[step], upper[step]],
                     [lower[step], upper[step]],
                     color='blue')
@@ -80,6 +80,7 @@ def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lowe
             plt.savefig(file_path + '/hist2d_' + event_type + '_' + names[group_num*steps+step] + '_high_res.png')
             plt.show()
             plt.close()
+
         if step == 3:
             bins = 3
             outputs[:, group_num*step+step] = optimize_thresholds(inputs[:,group_num*steps+step], outputs[:,group_num*steps+step])
@@ -288,8 +289,12 @@ def parse_model_name(model_name):
         "AE": "ae_resume_epoch",
         "PC": "pc_resume_epoch",
         "FC": "fc_resume_epoch",
-        "NE": "num_epochs",
-        "ES": "epochs_to_saturate",
+        "ANE": "ae_num_epochs",
+        "PNE": "pc_num_epochs",
+        "FNE": "fc_num_epochs",
+        "AES": "ae_epochs_to_saturate",
+        "PES": "pc_epochs_to_saturate",
+        "FES": "fc_epochs_to_saturate",
         "IM": "init_momentum",
         "MM": "max_momentum",
         "TILR": "tae_init_lr",
@@ -304,7 +309,9 @@ def parse_model_name(model_name):
         "OV": "output_vars",
         "WD": "weight_decay",
         "MLR": "min_lr",
-        "LD": "lr_decay",
+        "ALD": "ae_lr_decay",
+        "PLD": "pc_lr_decay",
+        "FLD": "fc_lr_decay",
         "CIF": "class_input_features",
         "CFD": "class_ff_dim"
     }
@@ -316,6 +323,9 @@ def parse_model_name(model_name):
     for key in key_map.keys():
         # If the model name contains the key
         if key in model_name:
+            if key in ["AE", "PC", "FC"]:
+                data[key_map[key]] = True
+                continue
             # Find the start and end index of the value
             start = model_name.index(key) + len(key)
             end = model_name.index('_', start) if '_' in model_name[start:] else len(model_name)

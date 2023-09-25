@@ -4,15 +4,15 @@ from models.masks import ParticleMask, SpecificParticleMask, KinematicMask
 from argparse import ArgumentParser
 import os
 
-def train(train_loader, val_loader, models, device, optimizer, criterion, model_type, output_vars, zero_padded=[], mask=None, num_epochs:int=50, loss_min:int=999, save_path:str='./saved_models', model_name:str=''):
+def train(train_loader, val_loader, models, device, optimizer, criterion, model_type, output_vars, zero_padded=[], mask=None, epochs:range=None, loss_min:int=999, save_path:str='./saved_models', model_name:str=''):
     # Create an outputs folder to store config files
     os.makedirs('./outputs/' + model_name, exist_ok=True)
-    if num_epochs <= 0:
+    if len(epochs) <= 0:
         print("Num epochs <= 0")
         return 0
     if model_type == 'autoencoder':
         tae = models[0]
-        for epoch in range(num_epochs):
+        for epoch in epochs:
             tae.train()
             running_loss = 0.0
             for batch_idx, batch in enumerate(train_loader):
@@ -58,15 +58,15 @@ def train(train_loader, val_loader, models, device, optimizer, criterion, model_
 
                 # Print running loss every 500 batches
                 if (batch_idx + 1) % 500 == 0:
-                    print(f"Epoch [{epoch+1}/{num_epochs}], Batch [{batch_idx+1}/{len(train_loader)}], Loss: {running_loss / 500:.4f}")
+                    print(f"Epoch [{epoch+1}/{epochs[-1] + 1}], Batch [{batch_idx+1}/{len(train_loader)}], Loss: {running_loss / 500:.4f}")
                     running_loss = 0.0
 
-            loss_min = validate(val_loader, models, device, criterion, model_type, output_vars, mask, epoch, num_epochs, loss_min, save_path, model_name)
+            loss_min = validate(val_loader, models, device, criterion, model_type, output_vars, mask, epoch, epochs[-1] + 1, loss_min, save_path, model_name)
         return loss_min
 
     elif model_type == 'classifier partial':
         tae, classifier = models[0], models[1]
-        for epoch in range(num_epochs):
+        for epoch in epochs:
             tae.eval()
             classifier.train()
             running_loss = 0.0
@@ -122,15 +122,15 @@ def train(train_loader, val_loader, models, device, optimizer, criterion, model_
 
                 # Print running loss every 500 batches
                 if (batch_idx + 1) % 500 == 0:
-                    print(f"Epoch [{epoch+1}/{num_epochs}], Batch [{batch_idx+1}/{len(train_loader)}], Loss: {running_loss / 500:.4f}")
+                    print(f"Epoch [{epoch+1}/{epochs[-1] + 1}], Batch [{batch_idx+1}/{len(train_loader)}], Loss: {running_loss / 500:.4f}")
                     running_loss = 0.0
 
-            loss_min = validate(val_loader, models, device, criterion, model_type, output_vars, mask, epoch, num_epochs, loss_min, save_path, model_name)
+            loss_min = validate(val_loader, models, device, criterion, model_type, output_vars, mask, epoch, epochs[-1] + 1, loss_min, save_path, model_name)
         return loss_min
         
     elif model_type == 'classifier full':
         tae, classifier = models[0], models[1]
-        for epoch in range(num_epochs):
+        for epoch in epochs:
             tae.eval()
             classifier.train()
             running_loss = 0.0
@@ -185,8 +185,8 @@ def train(train_loader, val_loader, models, device, optimizer, criterion, model_
 
                 # Print running loss every 500 batches
                 if (batch_idx + 1) % 500 == 0:
-                    print(f"Epoch [{epoch+1}/{num_epochs}], Batch [{batch_idx+1}/{len(train_loader)}], Loss: {running_loss / 500:.4f}")
+                    print(f"Epoch [{epoch+1}/{epochs[-1] + 1}], Batch [{batch_idx+1}/{len(train_loader)}], Loss: {running_loss / 500:.4f}")
                     running_loss = 0.0
 
-            loss_min = validate(val_loader, models, device, criterion, model_type, output_vars, mask, epoch, num_epochs, loss_min, save_path, model_name)
+            loss_min = validate(val_loader, models, device, criterion, model_type, output_vars, mask, epoch, epochs[-1] + 1, loss_min, save_path, model_name)
         return loss_min
