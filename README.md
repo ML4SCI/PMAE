@@ -6,4 +6,4 @@ Developed for GSOC 2023. You can read more about this project [here](https://med
 
 ### Usage
 
-An example of usage including appropriate prepocessing is provided in the [UCI_Higgs_Demo.ipynb](https://colab.research.google.com/github/ereinha/PMAE/blob/main/UCI_Higgs_Demo.ipynb)
+An example of usage including appropriate prepocessing is provided in the [UCI_Higgs_Demo.ipynb](https://colab.research.google.com/github/ML4SCI/PMAE/blob/main/UCI_Higgs_Demo.ipynb)
