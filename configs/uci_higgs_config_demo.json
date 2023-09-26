@@ -25,13 +25,13 @@
     "alpha": 0.4,
     "beta": 0.5,
     "gamma": 1,
-    "delta": 3.0,
+    "delta": 2.0,
     "output_vars": 4,
     "weight_decay": 0.00004,
     "min_lr": 0.00001,
-    "ae_lr_decay": 0.99992,
-    "pc_lr_decay": 0.99995,
-    "fc_lr_decay": 0.99990,
+    "ae_lr_decay": 0.9998,
+    "pc_lr_decay": 0.99987,
+    "fc_lr_decay": 0.99987,
     "class_input_features": 60,
     "class_ff_dim": 512
 }
