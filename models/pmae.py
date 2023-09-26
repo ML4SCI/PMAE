@@ -5,9 +5,9 @@ import math
 
 # Linear Embedding
 class LinearEmbedding(nn.Module):
-    def __init__(self, output_vars, d_model, linear: bool = False):
+    def __init__(self, vars, d_model, linear: bool = False):
         super(LinearEmbedding, self).__init__()
-        self.embedding_layer = nn.Linear(output_vars, d_model)
+        self.embedding_layer = nn.Linear(vars, d_model)
         self.relu = nn.ReLU()
         self.linear = linear
 
@@ -62,6 +62,7 @@ class TransformerAutoencoder(nn.Module):
 
     def forward(self, src):
         src_mask = (src[:,:,0] == 0)
+        src = torch.where(src == 999, torch.tensor(1, dtype=src.dtype, device=src.device), src)        
         src = self.embedding(src)
         src = self.pos_enc(src)
         tgt = self.trans.encoder(src, src_key_padding_mask=src_mask)

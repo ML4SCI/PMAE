@@ -28,7 +28,8 @@ class ParticleMask(nn.Module):
             if condition_met[b]:
                 replacement_values[b, idx, 3] = 999
 
-        final_output = (replacement_values == 0).float() * masked_x + replacement_values
+        mask_for_replacement = (replacement_values != 0).float()
+        final_output = (1 - mask_for_replacement) * masked_x + replacement_values
 
         return final_output
 
@@ -57,7 +58,8 @@ class SpecificParticleMask(nn.Module):
             if condition_met[b]:
                 replacement_values[b, self.particle:, 3] = 999
 
-        final_output = (replacement_values == 0).float() * masked_x + replacement_values
+        mask_for_replacement = (replacement_values != 0).float()
+        final_output = (1 - mask_for_replacement) * masked_x + replacement_values
 
         return final_output
 
