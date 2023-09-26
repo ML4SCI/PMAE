@@ -87,13 +87,13 @@ def train(train_loader, val_loader, models, device, optimizer, criterion, model_
                 outputs = tae(masked_inputs)
 
                 # Reset trivial values
-                mask_999 = (masked_inputs[:, :, 0] == 999).float()
+                mask_999 = (masked_inputs[:, :, 3] == 999).float()
                 outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
+                outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
                 masked_inputs[:,:,3:5] = torch.nn.functional.softmax(masked_inputs[:,:,3:5], dim=2)
-                masked_inputs[:, :, 0] = (1 - mask_999) * masked_inputs[:, :, 0] + mask_999 * 1
-                masked_inputs[:, :, 1] = (1 - mask_999) * masked_inputs[:, :, 1]
+                masked_inputs[:, :, 3] = (1 - mask_999) * masked_inputs[:, :, 3] + mask_999 * 1
+                masked_inputs[:, :, 4] = (1 - mask_999) * masked_inputs[:, :, 4]
 
                 # Flatten last axis
                 outputs = torch.reshape(outputs, (outputs.size(0),
@@ -153,10 +153,10 @@ def train(train_loader, val_loader, models, device, optimizer, criterion, model_
                     outputs[:,i,:] = temp_outputs[:,i,:]
 
                 # Reset trivial values
-                mask_999 = (masked_inputs[:, :, 0] == 999).float()
+                mask_999 = (masked_inputs[:, :, 3] == 999).float()
                 outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
+                outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
 
                 # Flatten last axes of tensors
                 outputs = torch.reshape(outputs, (outputs.size(0),
