@@ -70,8 +70,9 @@ def validate(val_loader, models, device, criterion, model_type, output_vars, mas
         dir_name = './outputs/' + model_name
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
-        with open(dir_name + '/ckpt_config.json', 'w') as f:
-            json.dump(config, f, indent=4)
+        if not os.path.exists(dir_name + '/ckpt_config.json'):
+            with open(dir_name + '/ckpt_config.json', 'w') as f:
+                json.dump(config, f, indent=4)
         tae, classifier = models[0], models[1]
         # Validation loop
         tae.eval()  # Set the tae to evaluation mode
@@ -95,13 +96,13 @@ def validate(val_loader, models, device, criterion, model_type, output_vars, mas
                 outputs = tae(masked_inputs)
 
                 # Reset trivial values
-                mask_999 = (masked_inputs[:, :, 0] == 999).float()
+                mask_999 = (masked_inputs[:, :, 3] == 999).float()
                 outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
+                outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
                 masked_inputs[:,:,3:5] = torch.nn.functional.softmax(masked_inputs[:,:,3:5], dim=2)
-                masked_inputs[:, :, 0] = (1 - mask_999) * masked_inputs[:, :, 0] + mask_999 * 1
-                masked_inputs[:, :, 1] = (1 - mask_999) * masked_inputs[:, :, 1]
+                masked_inputs[:, :, 3] = (1 - mask_999) * masked_inputs[:, :, 3] + mask_999 * 1
+                masked_inputs[:, :, 4] = (1 - mask_999) * masked_inputs[:, :, 4]
 
                 outputs = torch.reshape(outputs, (outputs.size(0),
                                                   outputs.size(1) * outputs.size(2)))
@@ -136,8 +137,9 @@ def validate(val_loader, models, device, criterion, model_type, output_vars, mas
         dir_name = './outputs/' + model_name
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
-        with open(dir_name + '/ckpt_config.json', 'w') as f:
-            json.dump(config, f, indent=4)
+        if not os.path.exists(dir_name + '/ckpt_config.json'):
+            with open(dir_name + '/ckpt_config.json', 'w') as f:
+                json.dump(config, f, indent=4)
         tae, classifier = models[0], models[1]
         # Validation loop
         tae.eval()  # Set the tae to evaluation mode
@@ -163,14 +165,14 @@ def validate(val_loader, models, device, criterion, model_type, output_vars, mas
                     outputs[:,i,:] = temp_outputs[:,i,:]
 
                 # Reset trivial values
-                mask_999 = (masked_inputs[:, :, 0] == 999).float()
+                mask_999 = (masked_inputs[:, :, 3] == 999).float()
                 outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
+                outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
 
                 # Flatten last axis
                 outputs = torch.reshape(outputs, (outputs.size(0),
-                                                    outputs.size(1) * outputs.size(2)))
+                                                  outputs.size(1) * outputs.size(2)))
                 inputs = torch.reshape(inputs, (inputs.size(0),
                                                 inputs.size(1) * inputs.size(2)))
 

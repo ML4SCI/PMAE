@@ -9,8 +9,7 @@ import matplotlib.pyplot as plt
 
 # Test loop
 def test(loader, test_batch_size, X_test_arr, test_labels, names, models, device, mask, scaler, output_vars, information, model_name, lower=[0,-3.2,-1.6,-1], upper=[4,3.2,1.6,1]):
-    # Scale back to original scale
-    X_test_arr = X_test_arr.reshape(X_test_arr.shape[0], X_test_arr.shape[1], X_test_arr.shape[2])
+    X_test_arr = X_test_arr.copy().reshape(X_test_arr.shape[0], X_test_arr.shape[1], X_test_arr.shape[2])
     X_test_arr_tensor = torch.tensor(X_test_arr)
     new_b_tags = np.expand_dims(X_test_arr[:,:,4] - X_test_arr[:,:,3], axis=-1)
     X_test_arr = np.concatenate((X_test_arr[:,:,:3], new_b_tags), axis=2)
@@ -18,8 +17,8 @@ def test(loader, test_batch_size, X_test_arr, test_labels, names, models, device
     X_test_arr_hh = X_test_arr[test_labels==1]
     X_test_arr_tt = X_test_arr[test_labels==0]
     if information == 'autoencoder':
+        tae = models[0]
         with torch.no_grad():
-            tae = models[0]
             all_preds = []
             for i in range(6):
                 outputs_arr = torch.zeros(X_test_arr_tensor.size(0), 6, 4+(output_vars % 3))
@@ -37,29 +36,23 @@ def test(loader, test_batch_size, X_test_arr, test_labels, names, models, device
 
                     # Forward pass
                     outputs = tae(masked_inputs)
+
+                    # Reset trivial values
+                    mask_999 = (masked_inputs[:, :, 3] == 999).float()
+                    outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
+                    outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                    outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
+
                     if output_vars == 3:
                         outputs_padded = torch.cat((outputs, torch.zeros(outputs.size(0), outputs.size(1), 1).to(device)), axis=2)
                         outputs_arr[batch_idx*test_batch_size:(batch_idx+1)*test_batch_size] = outputs_padded
                     else:
-                        outputs_arr[batch_idx*test_batch_size:(batch_idx+1)*test_batch_size] = outputs
-                    
-                    # Reset trivial values
-                    mask_999 = (masked_inputs[:, :, 0] == 999).float()
-                    outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                    outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                    outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
-
-                    outputs = torch.reshape(outputs, (outputs.size(0),
-                                                      outputs.size(1) * outputs.size(2)))
-
-                masked_inputs = torch.reshape(masked_inputs, (masked_inputs.size(0),
-                                                              masked_inputs.size(1) * masked_inputs.size(2)))
-                
+                        outputs_arr[batch_idx*test_batch_size:(batch_idx+1)*test_batch_size] = outputs            
 
                 outputs_arr = outputs_arr.cpu().numpy()
 
                 if output_vars == 4:
-                    new_b_tags = scipy.special.softmax((outputs_arr[:,:,3:5]), axis=2)
+                    new_b_tags = outputs_arr[:,:,3:5]
                     new_b_tags = np.expand_dims(new_b_tags[:,:,1] - new_b_tags[:,:,0], axis=-1)
                     outputs_arr = np.concatenate((outputs_arr[:,:,:3], new_b_tags), axis=2)
                 outputs_arr = outputs_arr.reshape(outputs_arr.shape[0], outputs_arr.shape[1]*outputs_arr.shape[2])
@@ -67,8 +60,10 @@ def test(loader, test_batch_size, X_test_arr, test_labels, names, models, device
                 outputs_arr_tt = outputs_arr[test_labels==0]
 
                 # Generate histograms
-                utils.make_hist2d(i, output_vars, X_test_arr_hh, outputs_arr_hh, scaler, 'di-Higgs', file_path='./outputs/' + model_name, lower=lower, upper=upper)
-                utils.make_hist2d(i, output_vars, X_test_arr_tt, outputs_arr_tt, scaler, 'ttbar', file_path='./outputs/' + model_name, lower=lower, upper=upper)
+                utils.make_hist2d(i, output_vars, X_test_arr_hh, outputs_arr_hh, scaler, 'di-Higgs', mask=mask_999.int().cpu().numpy(), 
+                                  file_path='./outputs/' + model_name, lower=lower, upper=upper)
+                utils.make_hist2d(i, output_vars, X_test_arr_tt, outputs_arr_tt, scaler, 'ttbar', 
+                                  mask=mask_999.int().cpu().numpy(), file_path='./outputs/' + model_name, lower=lower, upper=upper)
 
     elif information == 'partial':
         tae, classifier = models[0], models[1]
@@ -101,13 +96,13 @@ def test(loader, test_batch_size, X_test_arr, test_labels, names, models, device
                         outputs_arr[batch_idx*test_batch_size:(batch_idx+1)*test_batch_size] = outputs
 
                     # Reset trivial values
-                    mask_999 = (masked_inputs[:, :, 0] == 999).float()
+                    mask_999 = (masked_inputs[:, :, 3] == 999).float()
                     outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                    outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                    outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
+                    outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                    outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
                     masked_inputs[:,:,3:5] = torch.nn.functional.softmax(masked_inputs[:,:,3:5], dim=2)
-                    masked_inputs[:, :, 0] = (1 - mask_999) * masked_inputs[:, :, 0] + mask_999 * 1
-                    masked_inputs[:, :, 1] = (1 - mask_999) * masked_inputs[:, :, 1]
+                    masked_inputs[:, :, 3] = (1 - mask_999) * masked_inputs[:, :, 3] + mask_999 * 1
+                    masked_inputs[:, :, 4] = (1 - mask_999) * masked_inputs[:, :, 4]
                     
                     outputs = torch.reshape(outputs, (outputs.size(0),
                                                       outputs.size(1) * outputs.size(2)))
@@ -163,10 +158,10 @@ def test(loader, test_batch_size, X_test_arr, test_labels, names, models, device
                   outputs[:,i,:] = temp_outputs[:,i,:]
 
                 # Reset trivial values
-                mask_999 = (masked_inputs[:, :, 0] == 999).float()
+                mask_999 = (masked_inputs[:, :, 3] == 999).float()
                 outputs[:,:,3:5] = torch.nn.functional.softmax(outputs[:,:,3:5], dim=2)
-                outputs[:, :, 0] = (1 - mask_999) * outputs[:, :, 0] + mask_999 * 1
-                outputs[:, :, 1] = (1 - mask_999) * outputs[:, :, 1]
+                outputs[:, :, 3] = (1 - mask_999) * outputs[:, :, 3] + mask_999 * 1
+                outputs[:, :, 4] = (1 - mask_999) * outputs[:, :, 4]
 
                 outputs = torch.reshape(outputs, (outputs.size(0),
                                                   outputs.size(1) * outputs.size(2)))

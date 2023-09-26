@@ -7,36 +7,43 @@ import torch
 from sklearn.metrics import f1_score
 import scipy
 
-def optimize_thresholds(y_true, y_pred):
+def optimize_thresholds(y_true, y_pred, mask=None, epsilon=.2):
     y_t = y_true.copy() + 1
     y_p = y_pred.copy() + 1
 
-    sorted_indices = np.argsort(y_p)
-    sorted_y_t = y_t[sorted_indices]
-    sorted_y_p = y_p[sorted_indices]
+    if len(y_t[y_t != 0]) == 0:
+        return np.zeros_like(y_p) - 1
 
-    def objective(thresholds):
-        lower_threshold, upper_threshold = thresholds
+    sorted_y_t = y_t[~mask]
+    sorted_y_p = y_p[~mask]
+    sorted_indices = np.argsort(sorted_y_p)
+    sorted_y_t = sorted_y_t[sorted_indices]
+    sorted_y_p = sorted_y_p[sorted_indices]
+
+    def objective(threshold, sorted_y_t, sorted_y_p):
         classified_preds = np.zeros_like(sorted_y_t)
-        classified_preds[sorted_y_p > upper_threshold] = 2
-        classified_preds[(sorted_y_p <= upper_threshold) & (sorted_y_p > lower_threshold)] = 1
-        f1 = f1_score(sorted_y_t, classified_preds, average='micro')
+        classified_preds[sorted_y_p > threshold + epsilon] = 2
+        classified_preds[sorted_y_p < threshold - epsilon] = 0
+        classified_preds = classified_preds[sorted_y_t != 1]
+        sorted_y_t = sorted_y_t[sorted_y_t != 1]
+        f1 = f1_score(sorted_y_t, classified_preds, average='weighted')
         return -f1
 
-    initial_thresholds = [0.5, 1.5]
-    bounds = [(0, 1), (1, 2)]
+    initial_threshold = [1]
+    bounds = [(.25, 1.75)]
+    
+    result = scipy.optimize.minimize(objective, initial_threshold, bounds=bounds, method='L-BFGS-B', 
+                                     args=(sorted_y_t, sorted_y_p))
 
-    result = scipy.optimize.minimize(objective, initial_thresholds, bounds=bounds, method='L-BFGS-B')
+    optimized_threshold = result.x[0]
 
-    optimized_thresholds = result.x
-
-    y_p[y_p < (optimized_thresholds[0])] == 0
-    y_p[np.logical_and(y_p >= (optimized_thresholds[0]), y_p <= (optimized_thresholds[1] - 1))] == 1
-    y_p[y_p > (optimized_thresholds[1])] == 2
+    y_p[y_p > optimized_threshold + epsilon] = 2
+    y_p[(y_p <= optimized_threshold + epsilon) & (y_p >= optimized_threshold - epsilon)] = 1
+    y_p[y_p < optimized_threshold - epsilon] = 0
 
     return y_p - 1
 
-def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lower=None, upper=None):
+def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, mask=None, lower=None, upper=None):
     names = ["lepton pT", "lepton eta", "lepton phi", "Padding",
              "missing energy magnitude", "Padding", "missing energy phi", "Padding",
              "jet 1 pt", "jet 1 eta", "jet 1 phi", "jet 1 b-tag",
@@ -82,7 +89,7 @@ def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lowe
             plt.close()
         if step == 3:
             bins = 3
-            outputs[:, group_num*step+step] = optimize_thresholds(inputs[:,group_num*steps+step], outputs[:,group_num*steps+step])
+            outputs[:, group_num*steps+step] = optimize_thresholds(inputs[:,group_num*steps+step], outputs[:,group_num*steps+step], mask=mask)
         else:
             bins = 30
         varname = names[group_num*steps+step]
@@ -94,8 +101,8 @@ def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lowe
 
         #Plot heatmap
         plt.imshow(heatmap.T,
-                  extent=extent,
-                  origin='lower')
+                   extent=extent,
+                   origin='lower')
         plt.plot([lower[step], upper[step]],
                  [lower[step], upper[step]],
                  color='blue')
@@ -107,7 +114,7 @@ def make_hist2d(group_num, steps, ins, outs, scaler, event_type, file_path, lowe
         plt.xlim(lower[step], upper[step])
         plt.ylim(lower[step], upper[step])
         plt.colorbar()
-        plt.savefig(file_path + '/hist2d_' + event_type + '_' + names[group_num*steps+step] + '_high_res.png')
+        plt.savefig(file_path + '/hist2d_' + event_type + '_' + names[group_num*steps+step] + '.png')
         plt.show()
         plt.close()
 
@@ -288,8 +295,12 @@ def parse_model_name(model_name):
         "AE": "ae_resume_epoch",
         "PC": "pc_resume_epoch",
         "FC": "fc_resume_epoch",
-        "NE": "num_epochs",
-        "ES": "epochs_to_saturate",
+        "ANE": "ae_num_epochs",
+        "PNE": "pc_num_epochs",
+        "FNE": "fc_num_epochs",
+        "AES": "ae_epochs_to_saturate",
+        "PES": "pc_epochs_to_saturate",
+        "FES": "fc_epochs_to_saturate",
         "IM": "init_momentum",
         "MM": "max_momentum",
         "TILR": "tae_init_lr",
@@ -304,7 +315,9 @@ def parse_model_name(model_name):
         "OV": "output_vars",
         "WD": "weight_decay",
         "MLR": "min_lr",
-        "LD": "lr_decay",
+        "ALD": "ae_lr_decay",
+        "PLD": "pc_lr_decay",
+        "FLD": "fc_lr_decay",
         "CIF": "class_input_features",
         "CFD": "class_ff_dim"
     }
@@ -316,6 +329,9 @@ def parse_model_name(model_name):
     for key in key_map.keys():
         # If the model name contains the key
         if key in model_name:
+            if key in ["AE", "PC", "FC"]:
+                data[key_map[key]] = True
+                continue
             # Find the start and end index of the value
             start = model_name.index(key) + len(key)
             end = model_name.index('_', start) if '_' in model_name[start:] else len(model_name)
